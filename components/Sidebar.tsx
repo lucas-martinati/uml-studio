@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Entity, Attribute, Association, Connection, RelationType } from '../types';
-import { Plus, Trash2, ArrowRightLeft, Database, Download, Upload, XCircle, Image, Sun, Moon } from 'lucide-react';
+import { Plus, Trash2, ArrowRightLeft, Database, Download, Upload, XCircle, Sun, Moon } from 'lucide-react';
 import { useTheme } from './ThemeContext';
 import { AttributeList } from './AttributeList';
 
@@ -15,7 +15,6 @@ interface SidebarProps {
   onDeleteAssociation: (id: string) => void;
   selectedItems: Map<string, 'entity' | 'association'>;
   onExport: () => void;
-  onExportPng: () => void;
   onImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onClear: () => void;
   focusField?: { type: 'entity-name' | 'association-label' | 'cardinality'; id: string; connectionIndex?: number } | null;
@@ -33,7 +32,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onDeleteAssociation,
   selectedItems,
   onExport,
-  onExportPng,
   onImport,
   onClear,
   focusField,
@@ -189,10 +187,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const selectedAssoc = selectedType === 'association' ? associations.find(a => a.id === selectedId) : null;
 
   return (
-    <div className={`w-80 h-full border-l flex flex-col shadow-xl z-10 transition-colors duration-300 ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+    <div className={`inspector h-full border-l flex flex-col shadow-xl z-10 transition-colors duration-300 ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
       {/* Header with Import/Export */}
       <div className={`p-4 border-b flex items-center justify-between transition-colors duration-300 ${theme === 'dark' ? 'bg-slate-900 border-slate-700' : 'bg-slate-50 border-gray-200'}`}>
-        <h2 className={`font-bold ${theme === 'dark' ? 'text-slate-100' : 'text-slate-800'}`}>UML Builder</h2>
+        <h2 className={`font-bold ${theme === 'dark' ? 'text-slate-100' : 'text-slate-800'}`}>Propriétés</h2>
         <div className="flex gap-2">
           <button
             onClick={toggleTheme}
@@ -200,13 +198,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             title={theme === 'dark' ? 'Mode clair' : 'Mode sombre'}
           >
             {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
-          <button
-            onClick={onExportPng}
-            className={`p-1.5 rounded transition-colors ${theme === 'dark' ? 'text-slate-400 hover:text-green-400 hover:bg-slate-700' : 'text-slate-600 hover:text-green-600 hover:bg-green-50'}`}
-            title="Exporter en PNG (fond transparent)"
-          >
-            <Image size={18} />
           </button>
           <button
             onClick={onExport}

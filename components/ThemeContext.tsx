@@ -35,7 +35,7 @@ interface ThemeProviderProps {
 // Get initial theme from cookie (runs before component mount)
 const getInitialTheme = (): Theme => {
     if (typeof document === 'undefined') return 'light';
-    const savedTheme = getCookie('uml-generator-theme');
+    const savedTheme = getCookie('uml-studio-theme') ?? getCookie('uml-generator-theme');
     if (savedTheme === 'dark' || savedTheme === 'light') {
         return savedTheme;
     }
@@ -48,7 +48,7 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 
     // Save theme to cookie and update document class whenever theme changes
     useEffect(() => {
-        setCookie('uml-generator-theme', theme, 365); // Save for 1 year
+        setCookie('uml-studio-theme', theme, 365); // Save for 1 year
 
         // Update document root class for Tailwind dark mode
         if (theme === 'dark') {

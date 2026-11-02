@@ -1,11 +1,5 @@
 import { Entity, Association } from '../types';
-import { getEntityDimensions } from './geometry';
-
-// Import geometry helper for calculating entity dimensions
-const HEADER_HEIGHT = 30;
-const ROW_HEIGHT = 24;
-const PADDING = 10;
-const CHAR_WIDTH = 8;
+import { contentBounds } from './renderedGeometry';
 
 export const handleExportJson = (entities: Entity[], associations: Association[]) => {
     const data = {
@@ -17,7 +11,7 @@ export const handleExportJson = (entities: Entity[], associations: Association[]
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `mcd_diagram_${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `uml-studio_${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -29,88 +23,39 @@ export const handleExportPng = (
     associations: Association[],
     setExportModal: (modal: { blob: Blob; url: string } | null) => void
 ) => {
-    const svgElement = document.querySelector('svg');
+    const svgElement = document.querySelector<SVGSVGElement>('#diagram-canvas');
     if (!svgElement) return;
     if (entities.length === 0 && associations.length === 0) {
         alert("Le diagramme est vide !");
         return;
     }
 
-    const getEntityDims = (entity: Entity) => {
-        const entityNameWidth = entity.name.length * CHAR_WIDTH + 20;
-        const maxAttrWidth = entity.attributes.reduce((max, attr) => {
-            const attrText = (attr.isPk ? 'PK ' : '') + attr.name;
-            return Math.max(max, attrText.length * CHAR_WIDTH + 20);
-        }, 0);
-        const width = Math.max(entity.width, entityNameWidth, maxAttrWidth, 120);
-        const height = Math.max(entity.height, HEADER_HEIGHT + (entity.attributes.length * ROW_HEIGHT) + PADDING);
-        return { width, height };
-    };
-
-    // Calculate bounding box of all content
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
-    entities.forEach(entity => {
-        const dims = getEntityDims(entity);
-        minX = Math.min(minX, entity.x);
-        minY = Math.min(minY, entity.y);
-        maxX = Math.max(maxX, entity.x + dims.width);
-        maxY = Math.max(maxY, entity.y + dims.height);
-    });
-
-    associations.forEach(assoc => {
-        // Association label position
-        const labelPadding = 50;
-        minX = Math.min(minX, assoc.x - labelPadding);
-        minY = Math.min(minY, assoc.y - labelPadding);
-        maxX = Math.max(maxX, assoc.x + labelPadding);
-        maxY = Math.max(maxY, assoc.y + labelPadding);
-
-        // Include entity box if association has attributes
-        if (assoc.attributes.length > 0) {
-            const displayName = assoc.entityName && assoc.entityName.trim() !== ''
-                ? assoc.entityName
-                : assoc.label;
-            const nameWidth = displayName.length * CHAR_WIDTH + 20;
-            const maxAttrWidth = assoc.attributes.reduce((max, attr) => {
-                const attrText = (attr.isPk ? 'PK ' : '') + attr.name;
-                return Math.max(max, attrText.length * CHAR_WIDTH + 20);
-            }, 0);
-            const boxWidth = Math.max(140, nameWidth, maxAttrWidth);
-            const boxHeight = Math.max(40, HEADER_HEIGHT + assoc.attributes.length * ROW_HEIGHT + 5);
-
-            // Use entityBox position if set, otherwise estimate default
-            const isBinary = assoc.connections.length <= 2;
-            const defaultBoxX = assoc.x - boxWidth / 2;
-            const defaultBoxY = assoc.y + (isBinary ? 30 : 60);
-            const boxX = assoc.entityBoxX !== undefined ? assoc.entityBoxX : defaultBoxX;
-            const boxY = assoc.entityBoxY !== undefined ? assoc.entityBoxY : defaultBoxY;
-
-            minX = Math.min(minX, boxX);
-            minY = Math.min(minY, boxY);
-            maxX = Math.max(maxX, boxX + boxWidth);
-            maxY = Math.max(maxY, boxY + boxHeight);
-        }
-    });
-
-    // Add margin around content
+    const layer = svgElement.querySelector<SVGGElement>('#content-layer');
+    const bounds = layer && contentBounds(layer);
+    if (!bounds) return;
     const margin = 30;
-    minX -= margin;
-    minY -= margin;
-    maxX += margin;
-    maxY += margin;
-
-    const contentWidth = maxX - minX;
-    const contentHeight = maxY - minY;
+    const minX = bounds.x - margin, minY = bounds.y - margin;
+    const contentWidth = bounds.width + margin * 2;
+    const contentHeight = bounds.height + margin * 2;
 
     // Clone the SVG to modify it
     const svgClone = svgElement.cloneNode(true) as SVGSVGElement;
 
-    // Remove the grid background (make it transparent)
-    const backgroundRect = svgClone.querySelector('rect[fill="url(#grid)"]');
-    if (backgroundRect) {
-        backgroundRect.setAttribute('fill', 'transparent');
-    }
+    // SVG images cannot inherit the page's CSS. Freeze typography and colors.
+    const originals = svgElement.querySelectorAll('*');
+    const copies = svgClone.querySelectorAll('*');
+    originals.forEach((el, index) => {
+        if (!['text', 'tspan'].includes(el.tagName)) return;
+        const style = getComputedStyle(el);
+        const copy = copies[index] as SVGElement;
+        for (const prop of ['font-family', 'font-size', 'font-weight', 'text-decoration', 'fill']) {
+            copy.style.setProperty(prop, style.getPropertyValue(prop));
+        }
+    });
+    svgClone.querySelector('#grid-layer')?.remove();
+    svgClone.querySelectorAll('[data-transient]').forEach(el => el.remove());
+    svgClone.removeAttribute('class');
+    svgClone.style.background = 'transparent';
 
     // Reset transforms on groups (zoom/pan) to ensure export is not affected by current view
     // Only target the specific layers (grid and content)
@@ -209,7 +154,7 @@ export const handleExportPng = (
     });
 
     // High resolution scale factor (3x for crisp export)
-    const scale = 3;
+    const scale = Math.min(3, 8192 / Math.max(contentWidth, contentHeight), Math.sqrt(24000000 / (contentWidth * contentHeight)));
 
     // Set viewBox to crop to content area
     svgClone.setAttribute('viewBox', `${minX} ${minY} ${contentWidth} ${contentHeight}`);
@@ -218,7 +163,8 @@ export const handleExportPng = (
 
     // Serialize SVG
     const serializer = new XMLSerializer();
-    const svgString = serializer.serializeToString(svgClone);
+    const svgString = serializer.serializeToString(svgClone)
+        .replace(/rgb\(241, 245, 249\)|rgb\(226, 232, 240\)|rgb\(59, 130, 246\)|rgb\(37, 99, 235\)/g, '#0f172a');
     const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(svgBlob);
 
@@ -244,6 +190,7 @@ export const handleExportPng = (
 
             // Export as PNG with maximum quality
             canvas.toBlob((blob) => {
+                if (!blob) alert('Impossible de générer cette image.');
                 if (blob) {
                     const pngUrl = URL.createObjectURL(blob);
                     // Show export modal with options
@@ -253,6 +200,10 @@ export const handleExportPng = (
         }
 
         URL.revokeObjectURL(url);
+    };
+    img.onerror = () => {
+        URL.revokeObjectURL(url);
+        alert("Impossible de générer l’image. Réessayez après avoir réduit le diagramme.");
     };
     img.src = url;
 };

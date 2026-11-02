@@ -1,0 +1,40 @@
+{
+  "entities": [
+    {"id":"3032c81c-56a2-43e8-b497-a5f4bca4dbd1","name":"touite","x":-800,"y":-2440,"width":200,"height":180,"attributes":[
+      {"id":"attr-touite-1","name":"id","type":"int(50)","isPrimary":true,"isPk":true,"autoIncrement":true},
+      {"id":"attr-touite-3","name":"content","type":"varchar(235)","isNotNull":true},
+      {"id":"attr-touite-4","name":"note","type":"int(5)"},
+      {"id":"attr-touite-5","name":"posted_a","type":"date","isNotNull":true}
+    ]},
+    {"id":"af3f363b-d6f7-4ae4-84d6-5c08e5e9540b","name":"user","x":-380,"y":-2420,"width":180,"height":140,"attributes":[
+      {"id":"attr-user-1","name":"id","type":"int(11)","isPrimary":true,"isPk":true,"autoIncrement":true},
+      {"id":"attr-user-2","name":"email","type":"varchar(256)","isNotNull":true},
+      {"id":"attr-user-3","name":"passwd","type":"varchar(256)","isNotNull":true}
+    ]},
+    {"id":"c1f7a28e-891a-4d2b-93e1-2292f7a81001","name":"tag","x":-570,"y":-2150,"width":160,"height":90,"attributes":[
+      {"id":"attr-tag-1","name":"libelle","type":"varchar(100)","isPrimary":true,"isPk":true}
+    ]}
+  ],
+  "associations": [
+    {"id":"60208b34-5629-4f9b-b5c5-728d333a92ce","label":"note2touite","x":-440,"y":-2380,"attributes":[{"id":"4509bbf3-cde1-49fc-931b-1a966705b3f6","name":"state","isPk":false}],"connections":[
+      {"id":"b4a68b88-a4e8-48e6-bfc0-3375e87e075c","entityId":"3032c81c-56a2-43e8-b497-a5f4bca4dbd1","cardinality":"*"},
+      {"id":"6d939c43-fffc-449b-8190-6b58bc1d0576","entityId":"af3f363b-d6f7-4ae4-84d6-5c08e5e9540b","cardinality":"1"}
+    ],"entityName":"","entityBoxX":-560,"entityBoxY":-2480,"isLabelMovable":false},
+    {"id":"f0897fd8-e844-46d1-8662-d0c076e1171e","label":"follow","x":-470,"y":-2647.5,"attributes":[],"connections":[
+      {"id":"6ab811c2-4318-475e-ba46-a3d0cbebdcbf","entityId":"af3f363b-d6f7-4ae4-84d6-5c08e5e9540b","cardinality":"*"},
+      {"id":"99cb8d24-393c-4caa-bdf8-d6169d265296","entityId":"af3f363b-d6f7-4ae4-84d6-5c08e5e9540b","cardinality":"*"}
+    ]},
+    {"id":"b0050143-1654-4715-9754-f50fb8225578","label":"user2touite","x":-80,"y":-2450,"attributes":[],"connections":[
+      {"id":"fb69e1ab-4694-4a0b-9471-aea3f0429709","entityId":"af3f363b-d6f7-4ae4-84d6-5c08e5e9540b","cardinality":"1"},
+      {"id":"f53049f9-e881-4c44-806f-23deeef7fb89","entityId":"3032c81c-56a2-43e8-b497-a5f4bca4dbd1","cardinality":"*"}
+    ]},
+    {"id":"bb28841e-63e0-4290-96cc-da754f5ed417","label":"tag2touite","x":-30,"y":-2387.5,"attributes":[],"connections":[
+      {"id":"920a733e-345f-4693-a6e0-56ad3f19fdfa","entityId":"c1f7a28e-891a-4d2b-93e1-2292f7a81001","cardinality":"*"},
+      {"id":"53fd758a-55de-4f84-a0db-431217da3ece","entityId":"3032c81c-56a2-43e8-b497-a5f4bca4dbd1","cardinality":"*"}
+    ]},
+    {"id":"f642e439-fd65-43f9-9c74-35c66430f293","label":"user2tag","x":-140,"y":-2302.5,"attributes":[],"connections":[
+      {"id":"ebfedc59-a057-4670-a1a6-c05c6c99666f","entityId":"af3f363b-d6f7-4ae4-84d6-5c08e5e9540b","cardinality":"*"},
+      {"id":"13af3cd6-a94a-4a7d-8c83-5cb8c5e1c219","entityId":"c1f7a28e-891a-4d2b-93e1-2292f7a81001","cardinality":"*"}
+    ]}
+  ]
+}

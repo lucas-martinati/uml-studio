@@ -54,7 +54,7 @@ export const AssociationNode: React.FC<AssociationNodeProps> = ({
   const boxCenterY = boxY + boxHeight / 2;
 
   return (
-    <g className="select-none">
+    <g className="select-none" data-association-id={association.id}>
       {/* Main association shape - draggable */}
       <g
         onMouseDown={(e) => onMouseDown(e, association.id)}

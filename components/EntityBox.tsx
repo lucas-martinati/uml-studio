@@ -50,6 +50,7 @@ export const EntityBox: React.FC<EntityBoxProps> = ({ entity, onMouseDown, isSel
 
   return (
     <g
+      data-entity-id={entity.id}
       transform={`translate(${entity.x}, ${entity.y})`}
       onMouseDown={(e) => onMouseDown(e, entity.id)}
       onClick={(e) => e.stopPropagation()}

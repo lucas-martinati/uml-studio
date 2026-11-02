@@ -3,9 +3,12 @@ import { Entity, Association } from '../types';
 import { EntityBox } from './EntityBox';
 import { AssociationNode } from './AssociationNode';
 import { getCenter, getIntersection, getPolygonIntersection, getAssociationShapePoints, getLabelPosition, getEntityDimensions } from '../utils/geometry';
+import { visibleParts, worldBounds } from '../utils/renderedGeometry';
 import { useTheme } from './ThemeContext';
 
 interface DiagramCanvasProps {
+  onDragStart: () => void;
+  onDragEnd: () => void;
   entities: Entity[];
   associations: Association[];
   onMove: (id: string, x: number, y: number, type: 'entity' | 'association', deltaX?: number, deltaY?: number) => void;
@@ -24,6 +27,7 @@ interface DiagramCanvasProps {
 }
 
 export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
+  onDragStart, onDragEnd,
   entities,
   associations,
   onMove,
@@ -38,9 +42,39 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
 }) => {
   const { theme } = useTheme();
   // View state managed by App parent
-  const [dragging, setDragging] = useState<{ id: string; type: 'entity' | 'association' | 'entityBox' | 'pan'; startX: number; startY: number } | null>(null);
+  const [dragging, setDragging] = useState<{ id: string; type: 'entity' | 'association' | 'entityBox'; startX: number; startY: number } | null>(null);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const dragRecorded = useRef(false);
   const svgRef = useRef<SVGSVGElement>(null);
+  const [panning, setPanning] = useState(false);
+  const panOrigin = useRef<{ clientX: number; clientY: number; x: number; y: number; zoom: number } | null>(null);
+
+  // Capture right-button gestures before an entity/edge can select itself.
+  const startPan = (e: React.MouseEvent) => {
+    if (e.button !== 2) return;
+    e.preventDefault(); e.stopPropagation();
+    panOrigin.current = { clientX: e.clientX, clientY: e.clientY, ...view };
+    setPanning(true);
+    setDragging(null); setMarquee(null); setConnectionMode(null);
+  };
+  useEffect(() => {
+    if (!panning) return;
+    const move = (e: MouseEvent) => {
+      const start = panOrigin.current;
+      if (!start) return;
+      e.preventDefault();
+      onViewChange({ x: start.x + e.clientX - start.clientX, y: start.y + e.clientY - start.clientY, zoom: start.zoom });
+    };
+    const stop = () => { panOrigin.current = null; setPanning(false); };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', stop);
+    window.addEventListener('blur', stop);
+    return () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', stop);
+      window.removeEventListener('blur', stop);
+    };
+  }, [panning, onViewChange]);
 
   // Helper to convert Screen coordinates (mouse) to World coordinates (canvas)
   const screenToWorld = (clientX: number, clientY: number) => {
@@ -97,9 +131,6 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     };
   }, [view]);
 
-  // Last mouse position for calculating delta
-  const [lastPos, setLastPos] = useState({ x: 0, y: 0 });
-
   // Connection mode state for Ctrl+Drag linking
   const [connectionMode, setConnectionMode] = useState<{
     sourceId: string;
@@ -119,7 +150,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     };
     const handleKeyUp = (e: KeyboardEvent) => {
       // Cancel connection mode if Ctrl is released
-      if ((e.key === 'Control' || e.key === 'Meta') && connectionMode) {
+      if (e.key === 'Shift' && connectionMode) {
         setConnectionMode(null);
       }
     };
@@ -132,6 +163,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   }, [connectionMode]);
 
   const handleMouseDown = (e: React.MouseEvent, id: string, type: 'entity' | 'association') => {
+    if (e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault(); // Prevent text selection
 
@@ -152,6 +184,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     // Shift+Click/Drag: Start connection mode
     if (e.shiftKey) {
       if (type === 'entity') {
+        setMousePos({ x: mouseX, y: mouseY });
         setConnectionMode({ sourceId: id, sourceType: 'entity' });
         onSelect(id, type);
         return;
@@ -189,17 +222,18 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       }
     }
 
+    dragRecorded.current = false;
     // Setup for dragging (single or multi)
     setOffset({
       x: mouseX - obj.x,
       y: mouseY - obj.y,
     });
-    setLastPos({ x: mouseX, y: mouseY });
     setDragging({ id, type, startX: obj.x, startY: obj.y });
   };
 
   // Handler for dragging the entity box of an association
   const handleEntityBoxMouseDown = (e: React.MouseEvent, id: string) => {
+    if (e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
 
@@ -219,26 +253,24 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       onSelect(id, 'association');
     }
 
-    // Get current entity box position (or calculate default)
-    const isBinary = assoc.connections.length <= 2;
-    const defaultBoxX = assoc.x;
-    const defaultBoxY = assoc.y + (isBinary ? 30 : 60);
-
-    const boxX = assoc.entityBoxX !== undefined ? assoc.entityBoxX : defaultBoxX;
-    const boxY = assoc.entityBoxY !== undefined ? assoc.entityBoxY : defaultBoxY;
+    // Read the actual rendered box: automatic labels may have moved since creation.
+    const box = (e.currentTarget as SVGGraphicsElement).getBBox();
+    const position = new DOMPoint(box.x, box.y).matrixTransform(
+      svgRef.current.querySelector<SVGGElement>('#content-layer')!.getCTM()!.inverse()
+        .multiply((e.currentTarget as SVGGraphicsElement).getCTM()!)
+    );
+    const boxX = position.x, boxY = position.y;
+    dragRecorded.current = false;
 
     setOffset({
       x: mouseX - boxX,
       y: mouseY - boxY,
     });
-    setLastPos({ x: mouseX, y: mouseY });
     setDragging({ id, type: 'entityBox', startX: boxX, startY: boxY });
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!svgRef.current) return;
-
-    if (!svgRef.current) return;
+    if (!svgRef.current || panOrigin.current) return;
 
     // Current mouse position in World Coordinates
     const { x: currentX, y: currentY } = screenToWorld(e.clientX, e.clientY);
@@ -265,6 +297,11 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     // This ensures all elements move by the exact same amount
     const deltaX = snappedX - dragging.startX;
     const deltaY = snappedY - dragging.startY;
+    if (!dragRecorded.current) {
+      if (deltaX === 0 && deltaY === 0) return;
+      onDragStart();
+      dragRecorded.current = true;
+    }
 
     if (dragging.type === 'entityBox') {
       onMoveEntityBox(dragging.id, snappedX, snappedY);
@@ -275,6 +312,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
+    if (e.button !== 0 || panOrigin.current) return;
     // Finalize marquee selection
     if (marquee && svgRef.current) {
       const minX = Math.min(marquee.startX, marquee.endX);
@@ -298,27 +336,15 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
           }
         });
 
-        // Find associations inside marquee
-        // For associations, check if the center point OR any part overlaps
-        associations.forEach(assoc => {
-          // For n-ary associations (diamond shape), use a bounding box around center
-          // Diamond is roughly 60x40 for simple, larger for n-ary
-          const assocHalfWidth = assoc.connections.length > 2 ? 40 : 30;
-          const assocHalfHeight = assoc.connections.length > 2 ? 30 : 20;
-
-          // Check if association bounding box intersects with marquee
-          const assocLeft = assoc.x - assocHalfWidth;
-          const assocRight = assoc.x + assocHalfWidth;
-          const assocTop = assoc.y - assocHalfHeight;
-          const assocBottom = assoc.y + assocHalfHeight;
-
-          // Intersection check: not (completely left OR right OR above OR below)
-          const intersects = !(assocRight < minX || assocLeft > maxX ||
-            assocBottom < minY || assocTop > maxY);
-
-          if (intersects) {
-            newSelection.set(assoc.id, 'association');
-          }
+        // Select only visible primitives fully enclosed by the marquee.
+        // A diagonal edge's bounding rectangle must never select empty space.
+        const layer = svgRef.current.querySelector<SVGGElement>('#content-layer')!;
+        layer.querySelectorAll<SVGGElement>('[data-association-id]').forEach(group => {
+          const enclosed = visibleParts(group).some(part => {
+            const b = worldBounds(part, layer);
+            return (b.right > b.x || b.bottom > b.y) && b.x >= minX && b.right <= maxX && b.y >= minY && b.bottom <= maxY;
+          });
+          if (enclosed) newSelection.set(group.dataset.associationId!, 'association');
         });
 
         onSelect(null, null, { setSelection: newSelection });
@@ -354,10 +380,13 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     }
 
     setDragging(null);
+    onDragEnd();
   };
 
   // Start marquee selection on canvas mousedown (not on items)
   const handleCanvasMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    (document.activeElement as HTMLElement)?.blur?.();
     // If clicking on empty area, start marquee or clear selection
     if (svgRef.current) {
       // Start marquee selection in World Coordinates
@@ -369,16 +398,8 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     }
   };
 
-  const handleCanvasClick = (e: React.MouseEvent) => {
-    // Only clear selection if no marquee was drawn
-    if (!marquee) {
-      onSelect(null, null);
-    }
-  };
-
   const handleCanvasDoubleClick = (e: React.MouseEvent) => {
-    if (!svgRef.current || !onCreateEntityAtPosition) return;
-
+    if ((e.target as Element).closest('[data-association-id], [data-entity-id]')) return;
     if (!svgRef.current || !onCreateEntityAtPosition) return;
 
     const { x, y } = screenToWorld(e.clientX, e.clientY);
@@ -516,6 +537,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     return (
       <g
         key={`${assoc.id}-self-ref`}
+        data-association-id={assoc.id}
         onMouseDown={(e) => {
           e.stopPropagation();
           e.preventDefault();
@@ -533,18 +555,16 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
           }
           // Enable dragging if isLabelMovable is true
           if (assoc.isLabelMovable && svgRef.current) {
-            const rect = svgRef.current.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
+            dragRecorded.current = false;
+            const { x: mouseX, y: mouseY } = screenToWorld(e.clientX, e.clientY);
             setOffset({ x: mouseX - assoc.x, y: mouseY - assoc.y });
-            setLastPos({ x: mouseX, y: mouseY });
-            setDragging({ id: assoc.id, type: 'association', startX: assoc.x, startY: assoc.y });
+                    setDragging({ id: assoc.id, type: 'association', startX: assoc.x, startY: assoc.y });
           }
         }}
         style={{ cursor: assoc.isLabelMovable ? 'move' : 'pointer' }}
       >
         {/* Invisible path for clicking */}
-        <path d={simplePathD} stroke="transparent" strokeWidth="15" fill="none" />
+        <path d={simplePathD} stroke="transparent" strokeWidth="10" pointerEvents="stroke" fill="none" />
         {/* Visible angular path */}
         <path
           d={simplePathD}
@@ -570,6 +590,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         {/* Label - centered on labelCenterX */}
         {!assoc.relationType || assoc.relationType === 'association' ? (
           <text
+            data-association-label="true"
             x={labelCenterX} y={labelCenterY + 4} textAnchor="middle"
             style={{
               paintOrder: 'stroke',
@@ -769,6 +790,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
       return (
         <g
           key={`${assoc.id}-binary`}
+          data-association-id={assoc.id}
           onMouseDown={(e) => {
             e.stopPropagation();
             e.preventDefault();
@@ -798,7 +820,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
             x2={finalBorder2.x}
             y2={finalBorder2.y}
             stroke="transparent"
-            strokeWidth="15"
+            strokeWidth="10" pointerEvents="stroke"
           />
           {/* Visible line */}
           <line
@@ -832,6 +854,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
           {/* Label at center */}
           {!assoc.relationType || assoc.relationType === 'association' ? (
             <text
+              data-association-label="true"
               x={midX}
               y={midY - 2}
               textAnchor="middle"
@@ -1002,7 +1025,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     const cardPos = getLabelPosition(borderE, centerA, 15);
 
     return (
-      <g key={`${assoc.id}-${conn.id}`}>
+      <g key={`${assoc.id}-${conn.id}`} data-association-id={assoc.id}>
         <line
           x1={borderA.x}
           y1={borderA.y}
@@ -1052,8 +1075,14 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
 
   return (
     <svg
+      onMouseDownCapture={startPan}
+      onContextMenu={e => e.preventDefault()}
+      style={{ cursor: panning ? 'grabbing' : undefined }}
+      id="diagram-canvas"
+      aria-label="Zone de dessin du diagramme"
       ref={svgRef}
-      className="w-full h-full cursor-grab active:cursor-grabbing select-none"
+      onMouseLeave={() => { setDragging(null); setMarquee(null); setConnectionMode(null); onDragEnd(); }}
+      className="w-full h-full select-none"
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseDown={handleCanvasMouseDown}
@@ -1061,7 +1090,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
     >
       <defs>
         <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-          <path d="M 40 0 L 0 0 0 40" fill="none" stroke={theme === 'dark' ? '#334155' : '#e2e8f0'} strokeWidth="1" />
+          <circle cx="1" cy="1" r="1.2" fill={theme === 'dark' ? '#334155' : '#cbd5e1'} />
         </pattern>
         {/* Inheritance: empty triangle */}
         <marker id="inheritance-marker" markerWidth="16" markerHeight="16" refX="15" refY="8" orient="auto" markerUnits="userSpaceOnUse">
@@ -1088,6 +1117,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         {/* Connection Line Handling */}
         {connectionMode && (
           <line
+            data-transient="true"
             x1={sourceCenter?.x || 0}
             y1={sourceCenter?.y || 0}
             x2={mousePos.x}
@@ -1141,6 +1171,7 @@ export const DiagramCanvas: React.FC<DiagramCanvasProps> = ({
         {/* Marquee Selection Box */}
         {marquee && (
           <rect
+            data-transient="true"
             x={Math.min(marquee.startX, marquee.endX)}
             y={Math.min(marquee.startY, marquee.endY)}
             width={Math.abs(marquee.endX - marquee.startX)}

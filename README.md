@@ -1,4 +1,4 @@
-# 📊 UML Generator
+# 📊 UML Studio
 
 Un outil simple et puissant pour créer des diagrammes **MCD (Modèle Conceptuel de Données)** directement dans votre navigateur.
 
@@ -35,8 +35,8 @@ Pour lancer le projet localement sur votre machine :
 
 1.  **Cloner le dépôt** :
     ```bash
-    git clone https://github.com/votre-username/uml-generator.git
-    cd uml-generator
+    git clone https://github.com/lucas-martinati/uml-studio.git
+    cd uml-studio
     ```
 
 2.  **Installer les dépendances** :
@@ -83,3 +83,38 @@ npm run deploy
 ## 📄 Contexte
 
 Ce projet a été réalisé en "vibe coding". Il a été développé avec l'assistance d'une Intelligence Artificielle.
+
+## Atelier et sauvegarde locale
+
+- Barre inférieure : annuler, rétablir, zoomer et centrer sur le contenu visible.
+- Double-clic dans le vide : créer une entité. Shift + glisser : créer une relation.
+- Ctrl / ⌘ + clic : sélection multiple. Glisser dans le vide : sélection rectangulaire.
+- Clic droit + glisser : déplacer la vue, même en commençant sur un élément.
+- Molette : déplacer la vue. Ctrl + molette : zoomer autour du pointeur.
+- Suppr : supprimer la sélection (hors champs de saisie).
+- Ctrl / ⌘ + Z : annuler ; Ctrl / ⌘ + Shift + Z : rétablir.
+
+Les modifications sont enregistrées automatiquement sur cet appareil, pour cette adresse du site.
+L’export JSON reste conseillé pour conserver une copie et changer de navigateur.
+Les imports invalides sont rejetés sans remplacer le diagramme courant.
+
+L’export PNG et le recentrage utilisent la géométrie SVG réellement affichée : les anciennes
+coordonnées des relations automatiques, la grille et le rectangle de sélection sont exclus.
+Les textes sont incorporés avec leurs styles et l’image reste sur fond transparent.
+Les très grands diagrammes sont exportés avec une résolution réduite pour limiter la mémoire.
+
+Tailwind est compilé localement ; le site n’a plus besoin du CDN Tailwind.
+Après une mise à jour des dépendances ou de la configuration PostCSS, redémarrer `npm run dev`.
+
+## Vérifications
+
+```bash
+npm test
+npm run typecheck
+npm run build
+```
+
+Les tests couvrent la validation des imports et le cadrage SVG (zoom, déplacement,
+boîtes d’attributs, éléments temporaires et zones invisibles).
+
+Les imports et la réouverture de l’atelier sont automatiquement cadrés à l’écran sans modifier les coordonnées du projet. Les anciens attributs sans `isPk` restent compatibles ; `isPrimary` est reconnu et les métadonnées SQL sont conservées.
